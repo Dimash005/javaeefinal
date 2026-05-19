@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bolat-university-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: university_db
+      POSTGRES_USER: university_user
+      POSTGRES_PASSWORD: university_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U university_user -d university_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - university-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bolat-university-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@university.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5051:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - university-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bolat-university-app
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/university_db
+      SPRING_DATASOURCE_USERNAME: university_user
+      SPRING_DATASOURCE_PASSWORD: university_pass
+      JWT_SECRET: Ym9sYXRkaW5tdWtoYW1lZHNlY3JldGtleWZvcnVuaXZlcnNpdHlhcHBsaWNhdGlvbjEyMzQ1Njc4OTA=
+      JWT_EXPIRATION: 86400000
+      FILE_UPLOAD_DIR: /app/uploads
+      LOG_FILE: /app/logs/application.log
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - app_uploads:/app/uploads
+      - app_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - university-network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  app_uploads:
+  app_logs:
+
+networks:
+  university-network:
+    driver: bridge
